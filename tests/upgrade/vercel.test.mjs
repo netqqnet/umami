@@ -7,7 +7,7 @@ const config = JSON.parse(await readFile(new URL('../../vercel.json', import.met
 
 test('Vercel builds every upstream asset without running database migrations', () => {
   assert.equal(pkg.version, '3.4.1');
-  assert.equal(config.buildCommand, 'pnpm run build:vercel');
+  assert.equal(config.buildCommand, `npx --yes pnpm@${pkg.engines.pnpm} run build:vercel`);
   assert.equal(config.installCommand, `npx --yes pnpm@${pkg.engines.pnpm} install --frozen-lockfile`);
   assert.equal(pkg.scripts['build:vercel'], pkg.scripts.build.replace(' check:db', ''));
 });
