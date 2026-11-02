@@ -53,13 +53,18 @@ have been checked. This removes old detail; it does not create historical aggreg
 Deleting rows does not immediately shrink PostgreSQL files. Normal autovacuum makes the
 space reusable. If the existing database must return below a storage quota, separately plan
 a one-time file compaction or restore into a new database. `VACUUM FULL` requires additional
-free disk and an exclusive lock; it is deliberately not part of the daily job.
+free disk and an exclusive lock; it is deliberately not part of the weekly job.
 
-## Daily schedule
+## Weekly schedule
 
 Enable the Supabase Cron (`pg_cron`) extension in the verified target, then load
 `scripts/maintenance/schedule-data-retention.sql` after the first cleanup is approved.
-It schedules cleanup at 19:17 GMT (03:17 Asia/Shanghai). A second daily job keeps only
+It schedules cleanup on Saturday at 19:17 GMT (Sunday 03:17 Asia/Shanghai).
+The top-level procedure commits each 10,000-row batch independently and stops when no
+eligible rows remain. It allows at most 100 batches per run and reports a job failure if
+that limit is reached; completed batches stay committed. Do not wrap its `CALL` in a
+transaction or add a procedure-level `SET` clause, because it commits internally.
+A second weekly job, 30 minutes later, keeps only
 30 days of history for these two maintenance jobs, leaving other jobs' history alone.
 Reapplying the schedule updates the same job names rather than adding duplicate jobs.
 
@@ -82,6 +87,9 @@ For PostgreSQL hosts without `pg_cron`, schedule the same function through the h
 with all official migrations and the maintenance SQL installed. It rolls fixtures back and
 checks dry runs, exact cutoff/null timestamps, active sessions, protected data, dependent
 row deletion, repeat runs, the 10,000-row batch limit, and function permissions.
+After installing the weekly procedure, `tests/maintenance/weekly-data-retention.sql`
+checks a backlog larger than two batches, top-level transaction commits, repeat runs,
+active-session preservation and procedure permissions in a separate empty test database.
 
 On the verified backup copy, 24 batches removed 236,435 old events and 13,382 unreferenced
 sessions. Accounts, websites, shares and configuration counts stayed unchanged. File
