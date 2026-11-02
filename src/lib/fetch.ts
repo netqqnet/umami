@@ -31,7 +31,27 @@ export async function request(
     },
     body,
   }).then(async res => {
-    const data = await res.json();
+    if (res.status === 204) {
+      return { ok: res.ok, status: res.status };
+    }
+
+    let data: any;
+    try {
+      data = await res.json();
+    } catch {
+      const status = res.ok ? 502 : res.status;
+      return {
+        ok: false,
+        status,
+        data: {
+          error: {
+            status,
+            code: 'invalid-response',
+            message: 'The server is temporarily unavailable. Please try again later.',
+          },
+        },
+      };
+    }
 
     return {
       ok: res.ok,
