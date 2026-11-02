@@ -106,3 +106,15 @@ test('POST returns a configuration error instead of partial auth when 2FA is ena
   });
   expect(response.status).toBe(503);
 });
+
+test('POST returns JSON service unavailable when the login database is unavailable', async () => {
+  const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+  mocks.getUserByUsername.mockRejectedValue(new Error('private database details'));
+  const response = await POST(new Request('http://localhost/api/auth/login', { method: 'POST' }));
+  expect(response.status).toBe(503);
+  expect(response.headers.get('content-type')).toContain('application/json');
+  const data = await response.json();
+  expect(data).toMatchObject({ error: { code: 'service-unavailable', status: 503 } });
+  expect(JSON.stringify(data)).not.toContain('private database details');
+  log.mockRestore();
+});

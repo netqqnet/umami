@@ -12,57 +12,65 @@ import { getAllUserTeams, getUserByUsername } from '@/queries/prisma';
 import { loginRequestSchema } from './schema';
 
 export async function POST(request: Request) {
-  const { body, error } = await parseRequest(request, loginRequestSchema, { skipAuth: true });
+  try {
+    const { body, error } = await parseRequest(request, loginRequestSchema, { skipAuth: true });
 
-  if (error) {
-    return error();
-  }
-
-  const { username, password } = body;
-
-  const user = await getUserByUsername(username, { includePassword: true });
-
-  if (!user || !checkPassword(password, user.password)) {
-    return unauthorized({ code: 'incorrect-username-password' });
-  }
-
-  const { id, role, createdAt } = user;
-  const cloudMode = !!process.env.CLOUD_MODE;
-
-  // Check if 2FA is enabled for this user
-  const twoFactor = !cloudMode
-    ? await prisma.client.twoFactorAuth.findUnique({ where: { userId: id } })
-    : null;
-
-  if (twoFactor?.isEnabled) {
-    if (!isTwoFactorConfigured()) {
-      return serviceUnavailable(getTwoFactorConfigurationError());
+    if (error) {
+      return error();
     }
 
-    const partialToken = createSecureToken(
-      { userId: id, type: PARTIAL_AUTH_TOKEN_TYPE },
-      secret(),
-      {
-        expiresIn: '5m',
-      },
-    );
-    return json({ requiresTwoFactor: true, partialToken });
+    const { username, password } = body;
+
+    const user = await getUserByUsername(username, { includePassword: true });
+
+    if (!user || !checkPassword(password, user.password)) {
+      return unauthorized({ code: 'incorrect-username-password' });
+    }
+
+    const { id, role, createdAt } = user;
+    const cloudMode = !!process.env.CLOUD_MODE;
+
+    // Check if 2FA is enabled for this user
+    const twoFactor = !cloudMode
+      ? await prisma.client.twoFactorAuth.findUnique({ where: { userId: id } })
+      : null;
+
+    if (twoFactor?.isEnabled) {
+      if (!isTwoFactorConfigured()) {
+        return serviceUnavailable(getTwoFactorConfigurationError());
+      }
+
+      const partialToken = createSecureToken(
+        { userId: id, type: PARTIAL_AUTH_TOKEN_TYPE },
+        secret(),
+        {
+          expiresIn: '5m',
+        },
+      );
+      return json({ requiresTwoFactor: true, partialToken });
+    }
+    // Bind token to password hash so a password change invalidates old tokens.
+    const pwd = hash(user.password);
+
+    let token: string;
+
+    if (redis.enabled) {
+      token = await saveAuth({ userId: id, role, pwd });
+    } else {
+      token = createSecureToken({ userId: user.id, role, pwd }, secret());
+    }
+
+    const teams = await getAllUserTeams(id);
+
+    return json({
+      token,
+      user: { id, username, role, createdAt, isAdmin: role === ROLES.admin, teams },
+    });
+  } catch (error) {
+    console.error('Login unavailable', {
+      name: error instanceof Error ? error.name : 'UnknownError',
+      code: (error as { code?: string })?.code,
+    });
+    return serviceUnavailable();
   }
-  // Bind token to password hash so a password change invalidates old tokens.
-  const pwd = hash(user.password);
-
-  let token: string;
-
-  if (redis.enabled) {
-    token = await saveAuth({ userId: id, role, pwd });
-  } else {
-    token = createSecureToken({ userId: user.id, role, pwd }, secret());
-  }
-
-  const teams = await getAllUserTeams(id);
-
-  return json({
-    token,
-    user: { id, username, role, createdAt, isAdmin: role === ROLES.admin, teams },
-  });
 }
