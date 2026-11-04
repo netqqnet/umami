@@ -428,6 +428,7 @@ export const GROUPED_DOMAINS = [
   { name: 'Pinterest', domain: 'pinterest.com', match: 'pinterest.' },
   { name: 'Reddit', domain: 'reddit.com', match: 'reddit.' },
   { name: 'Snapchat', domain: 'snapchat.com', match: 'snapchat.' },
+  { name: 'V2EX', domain: 'v2ex.com', match: ['v2ex.com', 'v2ex.co'] },
   { name: 'Twitter', domain: 'twitter.com', match: ['twitter.', 't.co', 'x.com'] },
   { name: 'Yahoo', domain: 'yahoo.com', match: 'yahoo.' },
   { name: 'Yandex', domain: 'yandex.ru', match: 'yandex.' },
